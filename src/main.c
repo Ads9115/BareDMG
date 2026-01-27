@@ -20,6 +20,7 @@ static void print_usage(const char *program_name) {
     printf("\n");
     printf("Other options:\n");
     printf("  -d               Debug mode (verbose CPU state output)\n");
+    printf("  -t               Test mode: run ROM until completion (for test ROMs)\n");
     printf("  -h               Show this help message\n");
 }
 
@@ -56,6 +57,7 @@ int main(int argc, char *argv[]) {
     bool        mode_specified = false;
     bool        run_mode       = false;
     bool        debug_mode     = false;
+    bool        test_mode      = false;
     bool        info_mode      = false;
     int         step_count     = 0;
 
@@ -103,6 +105,15 @@ int main(int argc, char *argv[]) {
 
             else if (strcmp(argv[i], "-d") == 0) {
                 debug_mode = true;
+            }
+
+            else if (strcmp(argv[i], "-t") == 0) {
+                if (step_count > 0 || run_mode) {
+                    fprintf(stderr, "Error: -t cannot be used with -s or -r\n");
+                    return 1;
+                }
+                test_mode      = true;
+                mode_specified = true;
             }
 
             else {
@@ -210,6 +221,37 @@ int main(int argc, char *argv[]) {
 
         printf("\nEmulation finished.\n");
         print_cpu_state(&gb);
+    }
+
+    else if (test_mode) {
+        printf("Running test ROM...\n");
+        printf("(Serial output will appear below)\n");
+        printf("─────────────────────────────────\n\n");
+
+        u64 max_cycles = 100000000; // 100M cycles = ~24 seconds
+
+        while (gb.cycles < max_cycles && gb.running && !gb.cpu.halted) {
+            u8 cycles = cpu_step(&gb.cpu);
+            gb.cycles += cycles;
+
+            // Debug output if debug mode
+            if (debug_mode && (gb.cycles % 10000 == 0)) {
+                printf("[%llu cycles] PC=0x%04X\n", (unsigned long long)gb.cycles, gb.cpu.pc);
+            }
+        }
+
+        printf("\n─────────────────────────────────\n");
+
+        if (gb.cpu.halted) {
+            printf("Test completed (CPU halted)\n");
+            cart_unload(&gb.cart);
+            return 0;
+
+        } else if (gb.cycles >= max_cycles) {
+            printf("Test timeout (exceeded %llu cycles)\n", (unsigned long long)max_cycles);
+            cart_unload(&gb.cart);
+            return 1;
+        }
     }
 
     cart_unload(&gb.cart);
