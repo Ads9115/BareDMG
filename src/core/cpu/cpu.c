@@ -86,6 +86,7 @@ u8 cpu_step(CPU *cpu) {
     if (cpu->halted) {
         // TODO: Check for interrupts here
         // If interrupt pending, unhalt
+        puts("This shit is halted");
         return 4;
     }
 
