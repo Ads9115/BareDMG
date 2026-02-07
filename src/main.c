@@ -20,7 +20,46 @@ static void print_usage(const char *program_name) {
     printf("\n");
     printf("Other options:\n");
     printf("  -d               Debug mode (verbose CPU state output)\n");
+    printf("  -t               Test mode: run ROM until completion (for test ROMs)\n");
     printf("  -h               Show this help message\n");
+}
+
+// NOTE: Test function to test the serial output
+// Working as of now
+static void test_serial_output(void) {
+    printf("\n=== Testing Serial Output ===\n");
+
+    GameBoy gb;
+    gb_init(&gb);
+
+    // Manually write to serial registers (simulating what ROM does)
+    io_write(&gb, 0xFF01, 'H');  // Write 'H' to SB
+    io_write(&gb, 0xFF02, 0x81); // Start transfer (bit 7 set)
+
+    printf("Serial cycles initialized: %d\n", gb.serial_cycles);
+    printf("Running cycles to complete transfer...\n");
+
+    // Run for 600 cycles to complete the 512-cycle transfer
+    for (int i = 0; i < 150; i++) { // 150 * 4 = 600 cycles
+        u8 cycles = 4;
+        gb.cycles += cycles;
+
+        // Handle serial transfer (copy from gb_step)
+        if (gb.serial_cycles > 0) {
+            if (gb.serial_cycles <= cycles) {
+                gb.serial_cycles = 0;
+                printf("[SERIAL] Outputting: '%c' (0x%02X)\n", gb.io.sb, gb.io.sb);
+                putchar(gb.io.sb);
+                fflush(stdout);
+                gb.io.sc     = CLEAR_BIT(gb.io.sc, 7);
+                gb.io.if_reg = SET_BIT(gb.io.if_reg, 3);
+            } else {
+                gb.serial_cycles -= cycles;
+            }
+        }
+    }
+
+    printf("\n=== Serial Test Complete ===\n\n");
 }
 
 // print the CPU state
@@ -39,6 +78,7 @@ static void print_cpu_state(GameBoy *gb) {
 }
 
 int main(int argc, char *argv[]) {
+    /* test_serial_output(); */
 
     if (argc < 2) {
         fprintf(stderr, "Error: No ROM file specified\n\n");
@@ -56,6 +96,7 @@ int main(int argc, char *argv[]) {
     bool        mode_specified = false;
     bool        run_mode       = false;
     bool        debug_mode     = false;
+    bool        test_mode      = false;
     bool        info_mode      = false;
     int         step_count     = 0;
 
@@ -103,6 +144,15 @@ int main(int argc, char *argv[]) {
 
             else if (strcmp(argv[i], "-d") == 0) {
                 debug_mode = true;
+            }
+
+            else if (strcmp(argv[i], "-t") == 0) {
+                if (step_count > 0 || run_mode) {
+                    fprintf(stderr, "Error: -t cannot be used with -s or -r\n");
+                    return 1;
+                }
+                test_mode      = true;
+                mode_specified = true;
             }
 
             else {
@@ -210,6 +260,65 @@ int main(int argc, char *argv[]) {
 
         printf("\nEmulation finished.\n");
         print_cpu_state(&gb);
+    }
+
+    else if (test_mode) {
+        printf("Running test ROM...\n");
+        printf("(Serial output will appear below)\n");
+        printf("─────────────────────────────────\n\n");
+
+        u64 max_cycles     = 100000000; // 100M cycles = ~24 seconds
+        u64 last_pc        = 0;
+        u64 pc_stuck_count = 0;
+
+        while (gb.cycles < max_cycles && gb.running && !gb.cpu.halted) {
+            u16 pc_before = gb.cpu.pc;
+
+            gb_step(&gb);
+
+            // NOTE: Debug: Print first 100 instructions
+            // To be removed later on (This shit just isnt working right now)
+            if (gb.cycles < 500) {
+                printf("[%llu] PC=0x%04X opcode=0x%02X A=%02X F=%02X BC=%04X DE=%04X HL=%04X "
+                       "SP=%04X\n",
+                       (unsigned long long)gb.cycles, pc_before, mmu_read(&gb, pc_before),
+                       gb.cpu.regs.a, gb.cpu.regs.f, cpu_read_bc(&gb.cpu), cpu_read_de(&gb.cpu),
+                       cpu_read_hl(&gb.cpu), gb.cpu.sp);
+            }
+
+            // Detect infinite loops
+            if (pc_before == last_pc) {
+                pc_stuck_count++;
+                if (pc_stuck_count > 10000) {
+                    printf("\n[ERROR] CPU stuck in infinite loop at PC=0x%04X\n", pc_before);
+                    printf("Opcode at PC: 0x%02X\n", mmu_read(&gb, pc_before));
+                    break;
+                }
+
+            } else {
+                pc_stuck_count = 0;
+                last_pc        = pc_before;
+            }
+
+            // Debug output if debug mode
+            if (debug_mode && (gb.cycles % 10000 == 0)) {
+                printf("[%llu cycles] PC=0x%04X\n", (unsigned long long)gb.cycles, gb.cpu.pc);
+            }
+        }
+
+        printf("\n─────────────────────────────────\n");
+
+        if (gb.cpu.halted) {
+            printf("Test completed (CPU halted)\n");
+            cart_unload(&gb.cart);
+            return 0;
+
+        } else if (gb.cycles >= max_cycles) {
+            printf("Test timeout (exceeded %llu cycles)\n", (unsigned long long)max_cycles);
+            printf("Final PC: 0x%04X\n", gb.cpu.pc);
+            cart_unload(&gb.cart);
+            return 1;
+        }
     }
 
     cart_unload(&gb.cart);

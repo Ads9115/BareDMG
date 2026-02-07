@@ -63,6 +63,22 @@ void gb_step(GameBoy *gb) {
 
     u8 cycles = cpu_step(&gb->cpu);
     gb->cycles += cycles;
+
+    // Handle serial transfer
+    if (gb->serial_cycles > 0) {
+        if (gb->serial_cycles <= cycles) {
+            // Transfer complete
+            gb->serial_cycles = 0;
+            printf("[SERIAL] Outputting: '%c' (0x%02X)\n",
+                   gb->io.sb >= 0x20 && gb->io.sb < 0x7F ? gb->io.sb : '?', gb->io.sb);
+            putchar(gb->io.sb);
+            fflush(stdout);
+            gb->io.sc     = CLEAR_BIT(gb->io.sc, 7);
+            gb->io.if_reg = SET_BIT(gb->io.if_reg, 3);
+        } else {
+            gb->serial_cycles -= cycles;
+        }
+    }
 }
 
 // Run the emulator for the duration of one video frame

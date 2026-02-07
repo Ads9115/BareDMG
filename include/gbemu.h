@@ -68,6 +68,10 @@ typedef struct GameBoy {
     IORegisters io;
     u8          ie_register; // Interrupt Enable Register (0xFFFF)
 
+    // Serial transfer state
+    u8          serial_data;
+    u16         serial_cycles;
+
     // System state
     u64         cycles;
     bool        running;
