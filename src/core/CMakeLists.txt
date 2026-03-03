@@ -23,11 +23,17 @@ set(CORE_SOURCES
 
 # Create static library
 add_library(gbcore STATIC ${CORE_SOURCES})
-
+target_include_directories(gbcore
+    PUBLIC
+        ${PROJECT_SOURCE_DIR}/include
+        ${PROJECT_SOURCE_DIR}/include/core
+)
 # Make headers available
 target_include_directories(gbcore PUBLIC
     ${PROJECT_SOURCE_DIR}/include
 )
 
 # Link math library (We'll prolly need this later)
-target_link_libraries(gbcore m)
+if(NOT MSVC)
+    target_link_libraries(gbcore m)
+endif()

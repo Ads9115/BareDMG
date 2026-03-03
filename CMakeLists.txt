@@ -15,9 +15,16 @@ if(NOT CMAKE_BUILD_TYPE)
 endif()
 
 # Compiler flags
-set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Wextra -pedantic")
-set(CMAKE_C_FLAGS_DEBUG "-g -O0")
-set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG")
+if (MSVC)
+    # MSVC warning level
+    add_compile_options(/W4)
+    set(CMAKE_C_FLAGS_DEBUG "/Zi /Od")
+    set(CMAKE_C_FLAGS_RELEASE "/O2 /DNDEBUG")
+else()
+    add_compile_options(-Wall -Wextra -pedantic)
+    set(CMAKE_C_FLAGS_DEBUG "-g -O0")
+    set(CMAKE_C_FLAGS_RELEASE "-O3 -DNDEBUG")
+endif()
 
 # Include directories
 include_directories(${PROJECT_SOURCE_DIR}/include)
