@@ -37,10 +37,16 @@ add_executable(baredmg src/main.c)
 target_link_libraries(baredmg gbcore)
 
 # NOTE: Build tests
-option(BUILD_TESTS "Build unit tests" ON)
-if(BUILD_TESTS)
-    enable_testing()
-    add_subdirectory(tests)
+include(CTest)
+
+if(BUILD_TESTING)
+    find_package(PkgConfig)
+
+    if(PkgConfig_FOUND)
+        add_subdirectory(tests)
+    else()
+        message(WARNING "PkgConfig not found, skipping tests")
+    endif()
 endif()
 
 # Print build info
